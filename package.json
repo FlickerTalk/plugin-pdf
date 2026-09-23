@@ -1,0 +1,13 @@
+{
+  "name": "@flickertalk/plugin-pdf",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.0.0",
+    "vitest": "^5.0.1"
+  }
+}

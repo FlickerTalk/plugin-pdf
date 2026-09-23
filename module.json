@@ -1,0 +1,11 @@
+{
+  "id": "com.flickertalk.pdf",
+  "name": "PDF",
+  "version": "1.0.0",
+  "minCoreVersion": "0.1.0",
+  "components": [
+    "ft-pdf"
+  ],
+  "permissions": {},
+  "summary": "Put pictures together into a PDF, one page each, with a document mode."
+}

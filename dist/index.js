@@ -99,16 +99,20 @@ export function base64Of(bytes) {
 }
 
 const STYLE = `
-:host { display: block; font: 14px system-ui, sans-serif; color: #111; }
-@media (prefers-color-scheme: dark) { :host { color: #f4f4f4; } }
+:host { display: block; font: 14px system-ui, sans-serif; color: #111; --paper: #fff; }
+@media (prefers-color-scheme: dark) { :host { color: #f4f4f4; --paper: #111; } }
 .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0 10px; }
 button {
   appearance: none; border: 1px solid currentColor; background: transparent; color: inherit;
   border-radius: 10px; min-width: 44px; height: 40px; font-size: 18px; cursor: pointer; opacity: .75;
 }
 button:disabled { opacity: .25; }
+.i {
+  display: block; width: 22px; height: 22px; margin: auto; background: currentColor;
+  -webkit-mask: var(--i) center/contain no-repeat; mask: var(--i) center/contain no-repeat;
+}
 button.on { opacity: 1; background: currentColor; }
-button.on > span { filter: invert(1); }
+button.on .i { background: var(--paper); }
 .grow { flex: 1; }
 .note { font-size: 12px; opacity: .6; }
 ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -132,10 +136,10 @@ class ImagesToPdf extends HTMLElement {
     this.root.innerHTML = `
       <style>${STYLE}</style>
       <div class="bar">
-        <button data-act="add" aria-label="Add a picture"><span>➕</span></button>
-        <button data-act="scan" aria-label="Document: grey and sharp"><span>📄</span></button>
+        <button data-act="add" aria-label="Add a picture"><i class="i" style="--i:url(./icon/add-outline.svg)"></i></button>
+        <button data-act="scan" aria-label="Document: grey and sharp"><i class="i" style="--i:url(./icon/document-text-outline.svg)"></i></button>
         <span class="grow"></span>
-        <button data-act="send" aria-label="Send the PDF" disabled><span>➤</span></button>
+        <button data-act="send" aria-label="Send the PDF" disabled><i class="i" style="--i:url(./icon/send-outline.svg)"></i></button>
       </div>
       <ol></ol>
       <p class="note" hidden></p>
@@ -166,7 +170,7 @@ class ImagesToPdf extends HTMLElement {
     image.src = `data:${picked.mime || "image/jpeg"};base64,${picked.data}`;
     await image.decode().catch(() => {});
     if (!image.naturalWidth) {
-      this.say("😕");
+      this.say("That picture cannot be read");
       return;
     }
     this.pages.push({ name: picked.name, image });
@@ -202,10 +206,10 @@ class ImagesToPdf extends HTMLElement {
       const name = document.createElement("span");
       name.className = "name";
       name.textContent = `${at + 1}. ${page.name}`;
-      item.append(preview, name, button("up", at, "Move up", "⬆️"), button("drop", at, "Take out", "🗑️"));
+      item.append(preview, name, button("up", at, "Move up", "arrow-up-outline"), button("drop", at, "Take out", "trash-outline"));
       this.list.append(item);
     });
-    this.say(this.pages.length ? `${this.pages.length} 📄` : "");
+    this.say(this.pages.length ? `${this.pages.length} ${this.pages.length === 1 ? "page" : "pages"}` : "");
   }
 
   /** Each picture drawn again: smaller, and grey and sharp when it is a document. */
@@ -242,7 +246,7 @@ function button(act, at, label, icon) {
   made.dataset.act = act;
   made.dataset.at = String(at);
   made.setAttribute("aria-label", label);
-  made.textContent = icon;
+  made.append(drawIcon(icon));
   return made;
 }
 
@@ -268,3 +272,11 @@ function stamp() {
 }
 
 customElements.define("ft-pdf", ImagesToPdf);
+
+/** An icon the app lends (`./icon/<name>.svg`): painted in the colour of the app, not a picture. */
+function drawIcon(name) {
+  const made = document.createElement("i");
+  made.className = "i";
+  made.style.setProperty("--i", `url(./icon/${name}.svg)`);
+  return made;
+}

@@ -2,6 +2,26 @@
 // nothing from the network.
 import { describe, expect, it } from "vitest";
 import { a4Box, base64Of, pdfOf } from "./dist/index.js";
+import manifest from "./module.json";
+
+// The app's languages (plugin-sdk, module.schema.json): English is the top level.
+const languages = ["es", "pt", "fr", "de", "it", "ro", "ru", "uk", "pl", "tr", "ar", "hi", "bn", "id", "vi", "th", "ja", "ko", "zh-CN", "zh-TW"];
+
+// The schema counts characters, not UTF-16 units.
+const length = (text) => [...text].length;
+
+describe("manifest", () => {
+  // PDF is the name of the format: it stays as it is, only the summary is translated.
+  it("sums itself up in every language of the app, and keeps its name", () => {
+    expect(Object.keys(manifest.locales ?? {})).toEqual(languages);
+    for (const code of languages) {
+      const { summary, ...rest } = manifest.locales[code];
+      expect(rest, code).toEqual({});
+      expect(summary?.trim(), code).toBeTruthy();
+      expect(length(summary), code).toBeLessThanOrEqual(200);
+    }
+  });
+});
 
 const text = (bytes) => new TextDecoder("latin1").decode(bytes);
 /** A tiny thing that stands in for a JPEG: the writer only carries its bytes. */

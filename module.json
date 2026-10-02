@@ -1,11 +1,73 @@
 {
   "id": "com.flickertalk.pdf",
   "name": "PDF",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minCoreVersion": "0.1.0",
   "components": [
     "ft-pdf"
   ],
   "permissions": {},
-  "summary": "Put pictures together into a PDF, one page each, with a document mode."
+  "summary": "Put pictures together into a PDF, one page each, with a document mode.",
+  "locales": {
+    "es": {
+      "summary": "Junta imágenes en un PDF, una por página, con un modo documento."
+    },
+    "pt": {
+      "summary": "Junte imagens num PDF, uma por página, com um modo de documento."
+    },
+    "fr": {
+      "summary": "Rassemblez des images dans un PDF, une par page, avec un mode document."
+    },
+    "de": {
+      "summary": "Füge Bilder zu einem PDF zusammen, eines pro Seite, mit einem Dokumentmodus."
+    },
+    "it": {
+      "summary": "Unisci immagini in un PDF, una per pagina, con una modalità documento."
+    },
+    "ro": {
+      "summary": "Pune imagini laolaltă într-un PDF, câte una pe pagină, cu un mod document."
+    },
+    "ru": {
+      "summary": "Соберите изображения в PDF, по одному на страницу, с режимом документа."
+    },
+    "uk": {
+      "summary": "Зберіть зображення в PDF, по одному на сторінку, з режимом документа."
+    },
+    "pl": {
+      "summary": "Połącz obrazy w jeden PDF, po jednym na stronę, z trybem dokumentu."
+    },
+    "tr": {
+      "summary": "Görselleri bir PDF'te birleştir, her biri ayrı sayfada, belge moduyla."
+    },
+    "ar": {
+      "summary": "اجمع الصور في ملف PDF، صورة في كل صفحة، مع وضع للمستندات."
+    },
+    "hi": {
+      "summary": "तस्वीरों को एक PDF में जोड़ें, हर पेज पर एक, दस्तावेज़ मोड के साथ।"
+    },
+    "bn": {
+      "summary": "ছবিগুলো একটি PDF-এ জুড়ে দিন, প্রতি পাতায় একটি, ডকুমেন্ট মোডসহ।"
+    },
+    "id": {
+      "summary": "Gabungkan gambar menjadi PDF, satu gambar per halaman, dengan mode dokumen."
+    },
+    "vi": {
+      "summary": "Ghép các ảnh thành một PDF, mỗi ảnh một trang, có chế độ tài liệu."
+    },
+    "th": {
+      "summary": "รวมรูปภาพเป็น PDF หน้าละหนึ่งรูป พร้อมโหมดเอกสาร"
+    },
+    "ja": {
+      "summary": "画像を1ページに1枚ずつ PDF にまとめます。書類モード付き。"
+    },
+    "ko": {
+      "summary": "이미지를 한 페이지에 한 장씩 PDF로 묶습니다. 문서 모드도 있습니다."
+    },
+    "zh-CN": {
+      "summary": "把图片合成一个 PDF，每页一张，带文档模式。"
+    },
+    "zh-TW": {
+      "summary": "把圖片合成一個 PDF，每頁一張，附文件模式。"
+    }
+  }
 }

@@ -98,28 +98,29 @@ export function base64Of(bytes) {
   return btoa(binary);
 }
 
+// Ionic draws the window (the app lends it to the frame, app 1.6.0); this is only what is the
+// tool's own: the list of pages and the line under it. The colours are the app's, through Ionic's
+// variables, in light and dark.
 const STYLE = `
-:host { display: block; font: 14px system-ui, sans-serif; color: #111; --paper: #fff; }
-@media (prefers-color-scheme: dark) { :host { color: #f4f4f4; --paper: #111; } }
-.bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0 10px; }
-button {
-  appearance: none; border: 1px solid currentColor; background: transparent; color: inherit;
-  border-radius: 10px; min-width: 44px; height: 40px; font-size: 18px; cursor: pointer; opacity: .75;
-}
-button:disabled { opacity: .25; }
-.i {
-  display: block; width: 22px; height: 22px; margin: auto; background: currentColor;
+ft-pdf { display: flex; flex-direction: column; height: 100%; }
+ft-pdf ion-content { flex: 1; }
+ft-pdf .ft-i {
+  display: block; width: 22px; height: 22px; background: currentColor;
   -webkit-mask: var(--i) center/contain no-repeat; mask: var(--i) center/contain no-repeat;
 }
-button.on { opacity: 1; background: currentColor; }
-button.on .i { background: var(--paper); }
-.grow { flex: 1; }
-.note { font-size: 12px; opacity: .6; }
-ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-li { display: flex; align-items: center; gap: 8px; }
-li img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
-li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ft-pdf .note { font-size: 12px; color: var(--ion-color-medium, inherit); }
+ft-pdf ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ft-pdf li { display: flex; align-items: center; gap: 8px; }
+ft-pdf li img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+ft-pdf li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 `;
+
+/** An Ionicon in a button: Ionic's own `ion-icon` when the app lent it by name, else the one the
+ *  app serves at `./icon/<name>.svg`, painted in the button's colour. Never a picture of ours. */
+const icon = (name) =>
+  globalThis.Ionicons?.map?.has(name)
+    ? `<ion-icon slot="icon-only" name="${name}" aria-hidden="true"></ion-icon>`
+    : `<i slot="icon-only" class="ft-i" style="--i:url(./icon/${name}.svg)" aria-hidden="true"></i>`;
 
 /** The longest side a page picture keeps: more than this only makes a heavier file. */
 const PAGE_PIXELS = 1600;
@@ -127,34 +128,42 @@ const PAGE_PIXELS = 1600;
 class ImagesToPdf extends HTMLElement {
   constructor() {
     super();
-    this.root = this.attachShadow({ mode: "open" });
     this.pages = [];
     this.document = false;
   }
 
   connectedCallback() {
-    this.root.innerHTML = `
+    // In the page, not in a shadow root: the frame holds only this tool, and Ionic's global
+    // styles (colours, typography) do not cross a shadow boundary.
+    this.innerHTML = `
       <style>${STYLE}</style>
-      <div class="bar">
-        <button data-act="add" aria-label="Add a picture"><i class="i" style="--i:url(./icon/add-outline.svg)"></i></button>
-        <button data-act="scan" aria-label="Document: grey and sharp"><i class="i" style="--i:url(./icon/document-text-outline.svg)"></i></button>
-        <span class="grow"></span>
-        <button data-act="send" aria-label="Send the PDF" disabled><i class="i" style="--i:url(./icon/send-outline.svg)"></i></button>
-      </div>
-      <ol></ol>
-      <p class="note" hidden></p>
+      <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start">
+          <ion-button data-act="add" aria-label="Add a picture">${icon("add-outline")}</ion-button>
+          <ion-button data-act="scan" aria-label="Document: grey and sharp" aria-pressed="false">${icon("document-text-outline")}</ion-button>
+        </ion-buttons>
+        <ion-buttons slot="end">
+          <ion-button data-act="send" aria-label="Send the PDF" disabled>${icon("send-outline")}</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ol></ol>
+        <p class="note" hidden></p>
+      </ion-content>
     `;
-    this.list = this.root.querySelector("ol");
-    this.noteEl = this.root.querySelector(".note");
-    this.root.addEventListener("click", (event) => this.onClick(event));
-    globalThis.ft?.onOpen(() => {
+    this.list = this.querySelector("ol");
+    this.noteEl = this.querySelector(".note");
+    this.addEventListener("click", (event) => this.onClick(event));
+    globalThis.ft?.onOpen?.(() => {
       if (!this.pages.length) this.add();
     });
   }
 
   onClick(event) {
-    const button = event.target.closest("button");
-    if (!button) return;
+    const button = event.target.closest("ion-button");
+    if (!button || button.disabled) return;
     const { act, at } = button.dataset;
     if (act === "add") this.add();
     else if (act === "scan") this.toggleDocument();
@@ -195,8 +204,10 @@ class ImagesToPdf extends HTMLElement {
   }
 
   show() {
-    this.root.querySelector('[data-act="send"]').disabled = !this.pages.length;
-    this.root.querySelector('[data-act="scan"]').classList.toggle("on", this.document);
+    this.querySelector('[data-act="send"]').disabled = !this.pages.length;
+    const scan = this.querySelector('[data-act="scan"]');
+    scan.fill = this.document ? "solid" : undefined;
+    scan.setAttribute("aria-pressed", String(this.document));
     this.list.innerHTML = "";
     this.pages.forEach((page, at) => {
       const item = document.createElement("li");
@@ -241,12 +252,13 @@ class ImagesToPdf extends HTMLElement {
   }
 }
 
-function button(act, at, label, icon) {
-  const made = document.createElement("button");
+function button(act, at, label, name) {
+  const made = document.createElement("ion-button");
+  made.fill = "clear";
   made.dataset.act = act;
   made.dataset.at = String(at);
   made.setAttribute("aria-label", label);
-  made.append(drawIcon(icon));
+  made.innerHTML = icon(name);
   return made;
 }
 
@@ -272,11 +284,3 @@ function stamp() {
 }
 
 customElements.define("ft-pdf", ImagesToPdf);
-
-/** An icon the app lends (`./icon/<name>.svg`): painted in the colour of the app, not a picture. */
-function drawIcon(name) {
-  const made = document.createElement("i");
-  made.className = "i";
-  made.style.setProperty("--i", `url(./icon/${name}.svg)`);
-  return made;
-}

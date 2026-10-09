@@ -153,12 +153,16 @@ describe("with the Ionic the app lends", () => {
   it("shows document mode as a pressed button", async () => {
     const element = await mount();
     const scan = element.querySelector('ion-button[data-act="scan"]');
-    expect(scan.getAttribute("aria-pressed")).toBe("false");
+    // Ionic hands aria-pressed to its native button, and follows it when it changes.
+    const pressed = () => scan.getAttribute("aria-pressed") ?? scan.shadowRoot?.querySelector("button")?.getAttribute("aria-pressed");
+    expect(pressed()).toBe("false");
     scan.click();
-    expect(scan.getAttribute("aria-pressed")).toBe("true");
+    await tick();
+    expect(pressed()).toBe("true");
     expect(scan.fill).toBe("solid");
     scan.click();
-    expect(scan.getAttribute("aria-pressed")).toBe("false");
+    await tick();
+    expect(pressed()).toBe("false");
     expect(scan.fill).toBe(undefined);
   });
 

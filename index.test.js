@@ -1,8 +1,8 @@
 // The plugin's own tests (Plan §53): the PDF is written here, byte by byte, with no library and
 // nothing from the network.
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { a4Box, base64Of, pdfOf } from "./dist/index.js";
 import source from "./dist/index.js?raw";
 import manifest from "./module.json";
@@ -94,6 +94,118 @@ describe("images to PDF", () => {
 
   it("is a custom element the frame can show", () => {
     expect(customElements.get("ft-pdf")).toBeTruthy();
+  });
+});
+
+describe("with the Ionic the app lends", () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  // Ionic moves a button's label to the native button inside it once it has drawn.
+  const label = (button) => button.getAttribute("aria-label") ?? button.shadowRoot?.querySelector("button")?.getAttribute("aria-label");
+  let asked = 0;
+  const mount = async () => {
+    asked = 0;
+    globalThis.ft = { onOpen() {}, pickFile: async () => ((asked += 1), null) };
+    document.body.innerHTML = "";
+    const element = document.createElement("ft-pdf");
+    document.body.append(element);
+    await tick();
+    return element;
+  };
+  const page = (element) => {
+    element.pages = [{ name: "a.jpg", image: { src: "data:image/jpeg;base64,AA==" } }, { name: "b.jpg", image: { src: "data:image/jpeg;base64,AA==" } }];
+    element.show();
+  };
+
+  afterEach(() => {
+    delete globalThis.Ionicons;
+    delete globalThis.ft;
+  });
+
+  // Only an app that lends Ionic can show it (app 1.6.0): an older one keeps the version it has.
+  it("asks for an app that lends Ionic", () => {
+    expect(manifest.minCoreVersion).toBe("1.6.0");
+  });
+
+  it("draws in the page, not in a shadow root, so Ionic's own styles reach it", async () => {
+    const element = await mount();
+    expect(element.shadowRoot).toBe(null);
+    expect(element.querySelector(":scope > ion-header > ion-toolbar")).toBeTruthy();
+    expect(element.querySelector(":scope > ion-content ol")).toBeTruthy();
+    expect(element.querySelector(":scope > ion-content .note")).toBeTruthy();
+  });
+
+  it("has every action as an Ionic button in its toolbar, each with a label", async () => {
+    const element = await mount();
+    const acts = [...element.querySelectorAll("ion-toolbar ion-button")].map((button) => button.dataset.act);
+    expect(acts).toEqual(["add", "scan", "send"]);
+    for (const button of element.querySelectorAll("ion-toolbar ion-button")) expect(label(button), button.dataset.act).toBeTruthy();
+    expect(element.querySelector("button")).toBe(null);
+  });
+
+  it("asks the app for a picture from its button, and can send nothing until there is one", async () => {
+    const element = await mount();
+    expect(element.querySelector('ion-button[data-act="send"]').disabled).toBe(true);
+    element.querySelector('ion-button[data-act="add"]').click();
+    await tick();
+    expect(asked).toBe(1);
+  });
+
+  it("shows document mode as a pressed button", async () => {
+    const element = await mount();
+    const scan = element.querySelector('ion-button[data-act="scan"]');
+    expect(scan.getAttribute("aria-pressed")).toBe("false");
+    scan.click();
+    expect(scan.getAttribute("aria-pressed")).toBe("true");
+    expect(scan.fill).toBe("solid");
+    scan.click();
+    expect(scan.getAttribute("aria-pressed")).toBe("false");
+    expect(scan.fill).toBe(undefined);
+  });
+
+  it("moves and takes out a page with the Ionic buttons of its row", async () => {
+    const element = await mount();
+    page(element);
+    expect(element.querySelector('ion-button[data-act="send"]').disabled).toBe(false);
+    const rows = () => [...element.querySelectorAll("ol li .name")].map((name) => name.textContent);
+    expect(rows()).toEqual(["1. a.jpg", "2. b.jpg"]);
+    const row = element.querySelectorAll("ol li")[1];
+    for (const button of row.querySelectorAll("ion-button")) expect(label(button), button.dataset.act).toBeTruthy();
+    row.querySelector('ion-button[data-act="up"]').click();
+    expect(rows()).toEqual(["1. b.jpg", "2. a.jpg"]);
+    element.querySelectorAll("ol li")[0].querySelector('ion-button[data-act="drop"]').click();
+    expect(rows()).toEqual(["1. a.jpg"]);
+    expect(element.querySelector(".note").textContent).toBe("1 page");
+  });
+
+  // The icons are the app's: Ionic's own when the app lent them by name, else the ones it serves.
+  it("draws an Ionicon the app lent by name with ion-icon, and the one it serves otherwise", async () => {
+    let element = await mount();
+    expect(element.querySelector('[data-act="add"] ion-icon')).toBe(null);
+    expect(element.querySelector('[data-act="add"] [slot="icon-only"]').getAttribute("style")).toContain("./icon/add-outline.svg");
+
+    globalThis.Ionicons = { map: new Map([["add-outline", "data:image/svg+xml;utf8,<svg></svg>"]]) };
+    element = await mount();
+    expect(element.querySelector('[data-act="add"] ion-icon[slot="icon-only"]').getAttribute("name")).toBe("add-outline");
+  });
+});
+
+describe("the package", () => {
+  const dist = join(import.meta.dirname, "dist");
+  const files = readdirSync(dist);
+
+  // Ionic is the app's, lent to the frame: a copy in the package would be a second one, and heavy.
+  it("carries no Ionic of its own", () => {
+    for (const file of files) {
+      const code = readFileSync(join(dist, file), "utf8");
+      expect(code, file).not.toMatch(/@ionic\/core|ionicframework|stencil|defineCustomElement|__registerHost/i);
+      expect(code, file).not.toMatch(/^\s*import\s.*from\s+["'](?!\.\/)/m);
+    }
+  });
+
+  // The app carries it as a seed on iOS: 128 KiB at most (plugin-sdk).
+  it("is small enough to be a seed", () => {
+    const bytes = files.reduce((sum, file) => sum + statSync(join(dist, file)).size, 0);
+    expect(bytes).toBeLessThanOrEqual(128 * 1024);
   });
 });
 

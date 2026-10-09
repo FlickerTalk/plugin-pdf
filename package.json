@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@ionic/core": "9.0.4",
     "happy-dom": "^20.0.0",
     "vitest": "^5.0.1"
   }

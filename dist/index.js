@@ -1,0 +1,271 @@
+const A4 = { width: 595, height: 842 };
+const MARGIN = 24;
+
+export function a4Box({ width, height }) {
+  const room = { width: A4.width - MARGIN * 2, height: A4.height - MARGIN * 2 };
+  const scale = Math.min(room.width / width, room.height / height);
+  const drawn = { width: width * scale, height: height * scale };
+  return {
+    page: A4,
+    x: (A4.width - drawn.width) / 2,
+    y: (A4.height - drawn.height) / 2,
+    width: drawn.width,
+    height: drawn.height,
+  };
+}
+
+const ascii = (text) => new TextEncoder().encode(text);
+
+export function pdfOf(pages) {
+  if (!pages.length) return null;
+
+  const parts = [];
+  const offsets = [0];
+  let at = 0;
+  const put = (bytes) => {
+    parts.push(bytes);
+    at += bytes.length;
+  };
+  const object = (number, body, stream) => {
+    offsets[number] = at;
+    put(ascii(`${number} 0 obj\n${body}\n`));
+    if (stream) {
+      put(ascii("stream\n"));
+      put(stream);
+      put(ascii("\nendstream\n"));
+    }
+    put(ascii("endobj\n"));
+  };
+
+  // Object 1 is the catalogue and 2 the page tree, then three per page: the page, its content, the picture.
+  const first = 3;
+  const kids = pages.map((_, index) => `${first + index * 3} 0 R`).join(" ");
+
+  // The second line's high bytes are what readers look for to treat the file as binary.
+  put(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+  object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  object(2, `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
+
+  pages.forEach((page, index) => {
+    const number = first + index * 3;
+    const box = a4Box(page);
+    const drawn = ascii(
+      `q\n${box.width.toFixed(2)} 0 0 ${box.height.toFixed(2)} ${box.x.toFixed(2)} ${box.y.toFixed(2)} cm\n/Im0 Do\nQ\n`,
+    );
+    object(
+      number,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${box.page.width} ${box.page.height}] ` +
+        `/Resources << /XObject << /Im0 ${number + 2} 0 R >> >> /Contents ${number + 1} 0 R >>`,
+    );
+    object(number + 1, `<< /Length ${drawn.length} >>`, drawn);
+    object(
+      number + 2,
+      `<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /DeviceRGB ` +
+        `/BitsPerComponent 8 /Filter /DCTDecode /Length ${page.jpeg.length} >>`,
+      page.jpeg,
+    );
+  });
+
+  const count = offsets.length;
+  const table = [`xref\n0 ${count}\n`, "0000000000 65535 f \n"];
+  for (let number = 1; number < count; number += 1) {
+    table.push(`${String(offsets[number]).padStart(10, "0")} 00000 n \n`);
+  }
+  const startxref = at;
+  put(ascii(table.join("")));
+  put(ascii(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`));
+
+  const all = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  let written = 0;
+  for (const part of parts) {
+    all.set(part, written);
+    written += part.length;
+  }
+  return all;
+}
+
+export function base64Of(bytes) {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + 8192));
+  }
+  return btoa(binary);
+}
+
+const STYLE = `
+ft-pdf { display: flex; flex-direction: column; height: 100%; }
+ft-pdf ion-content { flex: 1; }
+ft-pdf .ft-i {
+  display: block; width: 22px; height: 22px; background: currentColor;
+  -webkit-mask: var(--i) center/contain no-repeat; mask: var(--i) center/contain no-repeat;
+}
+ft-pdf .note { font-size: 12px; color: var(--ion-color-medium, inherit); }
+ft-pdf ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ft-pdf li { display: flex; align-items: center; gap: 8px; }
+ft-pdf li img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+ft-pdf li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+`;
+
+const icon = (name) =>
+  globalThis.Ionicons?.map?.has(name)
+    ? `<ion-icon slot="icon-only" name="${name}" aria-hidden="true"></ion-icon>`
+    : `<i slot="icon-only" class="ft-i" style="--i:url(./icon/${name}.svg)" aria-hidden="true"></i>`;
+
+const PAGE_PIXELS = 1600;
+
+class ImagesToPdf extends HTMLElement {
+  constructor() {
+    super();
+    this.pages = [];
+    this.document = false;
+  }
+
+  connectedCallback() {
+    // Light DOM, because Ionic's global styles don't cross a shadow boundary.
+    this.innerHTML = `
+      <style>${STYLE}</style>
+      <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start">
+          <ion-button data-act="add" aria-label="Add a picture">${icon("add-outline")}</ion-button>
+          <ion-button data-act="scan" aria-label="Document: grey and sharp" aria-pressed="false">${icon("document-text-outline")}</ion-button>
+        </ion-buttons>
+        <ion-buttons slot="end">
+          <ion-button data-act="send" aria-label="Send the PDF" disabled>${icon("send-outline")}</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ol></ol>
+        <p class="note" hidden></p>
+      </ion-content>
+    `;
+    this.list = this.querySelector("ol");
+    this.noteEl = this.querySelector(".note");
+    this.addEventListener("click", (event) => this.onClick(event));
+    globalThis.ft?.onOpen?.(() => {
+      if (!this.pages.length) this.add();
+    });
+  }
+
+  onClick(event) {
+    const button = event.target.closest("ion-button");
+    if (!button || button.disabled) return;
+    const { act, at } = button.dataset;
+    if (act === "add") this.add();
+    else if (act === "scan") this.toggleDocument();
+    else if (act === "up") this.move(Number(at), -1);
+    else if (act === "drop") this.drop(Number(at));
+    else if (act === "send") this.send();
+  }
+
+  async add() {
+    const picked = await globalThis.ft.pickFile("image/*");
+    if (!picked) return;
+    const image = new Image();
+    image.src = `data:${picked.mime || "image/jpeg"};base64,${picked.data}`;
+    await image.decode().catch(() => {});
+    if (!image.naturalWidth) {
+      this.say("That picture cannot be read");
+      return;
+    }
+    this.pages.push({ name: picked.name, image });
+    this.show();
+  }
+
+  toggleDocument() {
+    this.document = !this.document;
+    this.show();
+  }
+
+  move(at, by) {
+    const to = at + by;
+    if (to < 0 || to >= this.pages.length) return;
+    [this.pages[at], this.pages[to]] = [this.pages[to], this.pages[at]];
+    this.show();
+  }
+
+  drop(at) {
+    this.pages.splice(at, 1);
+    this.show();
+  }
+
+  show() {
+    this.querySelector('[data-act="send"]').disabled = !this.pages.length;
+    const scan = this.querySelector('[data-act="scan"]');
+    scan.fill = this.document ? "solid" : undefined;
+    scan.setAttribute("aria-pressed", String(this.document));
+    this.list.innerHTML = "";
+    this.pages.forEach((page, at) => {
+      const item = document.createElement("li");
+      const preview = document.createElement("img");
+      preview.src = page.image.src;
+      preview.alt = "";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = `${at + 1}. ${page.name}`;
+      item.append(preview, name, button("up", at, "Move up", "arrow-up-outline"), button("drop", at, "Take out", "trash-outline"));
+      this.list.append(item);
+    });
+    this.say(this.pages.length ? `${this.pages.length} ${this.pages.length === 1 ? "page" : "pages"}` : "");
+  }
+
+  jpegOf(page) {
+    const size = fitted(page.image, PAGE_PIXELS);
+    const canvas = document.createElement("canvas");
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    if (this.document) context.filter = "grayscale(1) contrast(1.45) brightness(1.08)";
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(page.image, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/jpeg", 0.82);
+    return { jpeg: bytesOf(url.slice(url.indexOf(",") + 1)), width: canvas.width, height: canvas.height };
+  }
+
+  send() {
+    const pages = this.pages.map((page) => this.jpegOf(page)).filter(Boolean);
+    const made = pdfOf(pages);
+    if (!made) return;
+    globalThis.ft.send(`${stamp()}.pdf`, "application/pdf", base64Of(made));
+  }
+
+  say(text) {
+    this.noteEl.textContent = text;
+    this.noteEl.hidden = !text;
+  }
+}
+
+function button(act, at, label, name) {
+  const made = document.createElement("ion-button");
+  made.fill = "clear";
+  made.dataset.act = act;
+  made.dataset.at = String(at);
+  made.setAttribute("aria-label", label);
+  made.innerHTML = icon(name);
+  return made;
+}
+
+function fitted({ naturalWidth, naturalHeight }, max) {
+  const longest = Math.max(naturalWidth, naturalHeight);
+  if (longest <= max) return { width: naturalWidth, height: naturalHeight };
+  const scale = max / longest;
+  return { width: Math.max(1, Math.round(naturalWidth * scale)), height: Math.max(1, Math.round(naturalHeight * scale)) };
+}
+
+function bytesOf(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at);
+  return bytes;
+}
+
+function stamp() {
+  const now = new Date();
+  const two = (value) => String(value).padStart(2, "0");
+  return `document-${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+}
+
+customElements.define("ft-pdf", ImagesToPdf);
